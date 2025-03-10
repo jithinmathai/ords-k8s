@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ords-ingress
+  namespace: ords-zoo
+spec:
+  rules:
+  - host: ords.local  # Add this to your hosts file: 127.0.0.1 ords.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: ords-nondev
+            port:
+              number: 8888

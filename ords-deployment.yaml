@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ords-nondev
+  namespace: ords-zoo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: ords-nondev
+      app.kubernetes.io/name: ords-nondev
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: ords-nondev
+        app.kubernetes.io/name: ords-nondev
+    spec:
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: ords-config-pvc
+        - name: scripts
+          configMap:
+            name: ords-init-config
+            defaultMode: 0755  # Make the script executable
+      initContainers:
+        - name: set-config
+          image: container-registry.oracle.com/database/ords:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ords-secret
+                  key: admin_user
+            - name: ADMIN_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: ords-secret
+                  key: admin_pwd
+            - name: PROXY_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: ords-secret
+                  key: proxy_pwd
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: ords-secret
+                  key: db_host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ords-secret
+                  key: db_port
+            - name: DB_SERVICENAME
+              valueFrom:
+                secretKeyRef:
+                  name: ords-secret
+                  key: db_servicename
+          command:
+            - /bin/bash
+            - /scripts/ords_setup.sh
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: config
+              mountPath: /etc/ords/config
+      containers:
+        - name: app
+          image: container-registry.oracle.com/database/ords:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - ords
+            - serve
+          ports:
+            - containerPort: 8080
+              name: http-ords
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/ords/config

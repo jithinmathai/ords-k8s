@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ords-init-config
+  namespace: ords-zoo
+data:
+  ords_setup.sh: |-
+    #!/bin/bash
+    
+    echo "Starting ORDS setup with debug enabled..."
+    echo "Environment variables:"
+    env | grep DB_
+    
+    echo "Testing connectivity to $DB_HOST:$DB_PORT"
+    
+    # Test connectivity using built-in tools
+    timeout 5 bash -c "cat < /dev/null > /dev/tcp/$DB_HOST/$DB_PORT"
+    if [ $? -ne 0 ]; then
+      echo "Connection failed! Unable to reach the database at $DB_HOST:$DB_PORT"
+      exit 1
+    fi
+    
+    echo "Connection successful! Proceeding with ORDS installation."
+    
+    # Add Oracle client config check
+    echo "Oracle client testing..."
+    if command -v tnsping &> /dev/null; then
+      echo "Trying tnsping to check service..."
+      tnsping $DB_SERVICENAME
+    else
+      echo "tnsping not available for service verification"
+    fi
+    
+    echo "Testing simple SQL connect with ADMIN_USER..."
+    # Try a direct connection with sqlplus if available
+    if command -v sqlplus &> /dev/null; then
+      echo "exit" | sqlplus -L "$ADMIN_USER@//$DB_HOST:$DB_PORT/$DB_SERVICENAME"
+      if [ $? -ne 0 ]; then
+        echo "Direct connection test failed!"
+      else
+        echo "Direct connection test successful!"
+      fi
+    else
+      echo "sqlplus not available for connection testing"
+    fi
+    
+    echo "Running ORDS install..."
+    
+    # Use the correct syntax for ORDS 24.4
+    ords install \
+      --admin-user $ADMIN_USER \
+      --proxy-user \
+      --db-hostname $DB_HOST \
+      --db-port $DB_PORT \
+      --db-servicename $DB_SERVICENAME \
+      --feature-sdw true \
+      --password-stdin <<EOF
+    $ADMIN_PWD
+    $PROXY_PWD
+    EOF
+    
+    RESULT=$?
+    if [ $RESULT -ne 0 ]; then
+      echo "ORDS installation failed with error code: $RESULT"
+      echo "Verifying database connection parameters:"
+      echo "HOST: $DB_HOST"
+      echo "PORT: $DB_PORT"
+      echo "SERVICE: $DB_SERVICENAME"
+      echo "ADMIN USER: $ADMIN_USER"
+      
+      # Display current ORDS version 
+      ords --version
+      exit $RESULT
+    fi
+    
+    echo "ORDS installation complete"
+    echo "ORDS setup completed successfully"

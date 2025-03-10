@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ords-init-config
+  namespace: ords-zoo
+data:
+  ords_setup.sh: |-
+    #!/bin/bash
+    
+    echo "Starting ORDS setup..."
+    echo "Attempting to connect to database at $DB_HOST:$DB_PORT/$DB_SERVICENAME as $ADMIN_USER"
+    
+    # Install ORDS configuration
+    # The --admin-user-connect-as sysdba is required for the SYS user
+    echo "Running ORDS install..."
+    ords install --admin-user $ADMIN_USER --admin-user-connect-as sysdba \
+      --proxy-user \
+      --db-hostname $DB_HOST \
+      --db-port $DB_PORT \
+      --db-servicename $DB_SERVICENAME \
+      --feature-sdw true \
+      --password-stdin <<EOF
+    $ADMIN_PWD
+    $PROXY_PWD
+    EOF
+    
+    RESULT=$?
+    if [ $RESULT -ne 0 ]; then
+      echo "ORDS installation failed with error code: $RESULT"
+      exit $RESULT
+    fi
+    
+    echo "ORDS installation complete"
+    
+    # Set up APEX files
+    echo "Setting up APEX files..."
+    cd /etc/ords/config
+    
+    echo "Downloading APEX files..."
+    curl -o apex.zip https://download.oracle.com/otn_software/apex/apex-latest.zip
+    
+    echo "Extracting APEX files..."
+    jar xvf apex.zip
+    
+    echo "Cleaning up..."
+    rm apex.zip
+    
+    echo "Setting permissions..."
+    chmod -R 755 apex
+    
+    # Configure APEX static path
+    echo "Configuring APEX static path..."
+    ords config set standalone.static.path /etc/ords/config/apex/images
+    
+    echo "ORDS setup completed successfully"
+Last edited 4 minutes ago
